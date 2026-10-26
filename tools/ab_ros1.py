@@ -57,8 +57,23 @@ def nn_max(a, b):
     return best
 
 
+def same_sorted(a, b, q=1e-4):
+    """fast path: identical point sets (each point within q) after sorting the quantised rows"""
+    if len(a) != len(b):
+        return False
+    qa = np.round(a / q).astype(np.int64)
+    qb = np.round(b / q).astype(np.int64)
+    qa = qa[np.lexsort(qa.T[::-1])]
+    qb = qb[np.lexsort(qb.T[::-1])]
+    return bool(np.abs(qa - qb).max() <= 1) if len(a) else True
+
+
 def compare(a, b):
     r = {'n_new': len(a), 'n_ref': len(b)}
+    if same_sorted(a, b):
+        r['max_nn'] = 0.0 if len(a) == 0 else float(np.abs(np.sort(a, 0) - np.sort(b, 0)).max())
+        r['same'] = 1
+        return r
     if len(a) == 0 or len(b) == 0:
         r['max_nn'] = 0.0 if len(a) == len(b) else float('inf')
     else:

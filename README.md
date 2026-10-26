@@ -116,7 +116,9 @@ A/B against RTAB-Map on the same frames: every frame both produced, all six clou
 | | data | frames compared | identical | max point distance |
 |---|---|---|---|---|
 | ROS 2, rtabmap 0.23.13 | 3065 D435 frames, garden simulation, 91 views of 11 objects | 1065 / 1084 per topic | **all** | 0.36 um (float rounding of the TF) |
-| ROS 1, rtabmap 0.21.13 | ROS1_RESULTS |
+| ROS 1, rtabmap 0.21.13 | live Gazebo garden (vitulus_sim) with the full robot stack, robot moved to 240 views of 30 objects, 8116 frames | 8114 - 8116 per topic (0.98 M obstacle, 2.4 M ground, 5.8 M cloud points in the nav profile) | **all** | 0.48 um |
+
+Frames compared = frames both sides answered (RTAB-Map dropped many frames in the ROS 2 run, see below).
 
 Resources, ROS 2, the same 864 frames at 14.4 Hz (desktop PC, other load present):
 
@@ -124,6 +126,9 @@ Resources, ROS 2, the same 864 frames at 14.4 Hz (desktop PC, other load present
 |---|---|---|---|---|
 | RTAB-Map chains | 4 | 616 MB | 10.7 ms | 289-316 / 864 |
 | depth_obstacles | 1 | 63 MB | 7.8 ms | 841-843 / 864 |
+
+On the Vitulus robot (Intel NUC 8 i7, ROS 1, D435 at 15 Hz, both profiles): 6.1 ms per frame on average,
+~9 % of one core, 52 MB.
 
 Reproduce: `tools/ab_rtabmap.py parity|cpu BAG` (starts both pipelines in their own
 ROS_DOMAIN_ID; the RTAB-Map side is `launch/rtabmap_reference.launch.py`); ROS 1: `tools/ab_ros1.py` next to
