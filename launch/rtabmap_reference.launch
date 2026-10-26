@@ -1,0 +1,91 @@
+<launch>
+
+    <node pkg="nodelet" type="nodelet" name="ref_depth2cloud" args="standalone rtabmap_util/point_cloud_xyz" output="screen">
+        <remap from="depth/image" to="/rtabmap/depth/image_out"/>
+        <remap from="depth/camera_info" to="/rtabmap/rgb/camera_info_out"/>
+        <remap from="cloud" to="/ref/cloudXYZ"/>
+
+        <param name="approx_sync" type="bool" value="true"/><!--def=true-->
+        <param name="decimation" type="int" value="8"/><!--def=1(off)-->
+        <param name="voxel_size" type="double" value="0.05"/><!--def=0.0(off)-->
+        <!--<param name="min_depth" type="double" value="0.0"/>def=0.0-->
+        <!-- dataprep 2026-07-12 (D435 sunlight-noise / map-quality tier):
+             max_depth 3.5->2.8  : D435 stereo depth degrades badly past ~3 m
+                                   outdoors (sun-washed disparity = ghost points);
+                                   2.8 keeps a useful obstacle horizon while
+                                   dropping the far unreliable tail.
+             noise_filter_radius 0.4->0.12 : the old 0.4 m radius accepted
+                                   almost any neighbour (huge sphere) so the
+                                   outlier removal was near-inert; 0.12 m is a
+                                   real tight radius that actually strips
+                                   isolated speckle.
+             min_neighbors 3->5  : require more support within that tight
+                                   radius before a point survives. -->
+        <param name="max_depth" type="double" value="2.8"/><!--was 3.5-->
+        <param name="noise_filter_radius" type="double" value="0.12"/> <!--was 0.4-->
+        <param name="noise_filter_min_neighbors" type="int" value="5"/><!--was 3-->
+    </node>
+
+    <node pkg="nodelet" type="nodelet" name="ref_obstacles_detection" args="standalone rtabmap_util/obstacles_detection rtabmap_pc_processing" output="screen">
+<!--        <remap from="cloud"     to="/vdb_mapping/vdb_map_pointcloud"/>-->
+        <remap from="cloud"     to="/ref/cloudXYZ"/>
+        <remap from="obstacles" to="/ref/obstacles_cloud"/>
+        <remap from="ground"    to="/ref/ground_cloud"/>
+        <param name="frame_id"             type="string" value="base_link"/>
+        <!-- <param name="map_frame_id"         type="string" value="odom"/> -->
+        <param name="wait_for_transform"   type="bool" value="true"/>
+        <param name="Grid/MinClusterSize"     type="int" value="2"/>
+        <param name="Grid/MaxObstacleHeight" type="double" value="0.5"/>
+        <param name="Grid/MinObstacleHeight" type="double" value="0.15"/>
+        <param name="Grid/MaxGroundHeight"       type="double" value="0.15"/>
+        <param name="Grid/MaxGroundAngle" type="double" value="35"/>
+        <param name="Grid/ClusterRadius" type="double" value="0.15"/>
+        <!--      <param name="Grid/CellSize"       type="double" value="0.02"/>-->
+        <!--      <param name="Grid/MapFrameProjection" type="bool" value="true"/>-->
+        <param name="Grid/NormalsSegmentation" type="bool" value="true"/>
+        <param name="Grid/FlatObstacleDetected" type="bool" value="true"/>
+    </node>
+
+    <!-- 2026-08-09 WIDE chain for MAPPING ONLY (direct_raster live obstacle
+         tuning). The narrow /obstacles_cloud|/ground_cloud above stays the
+         navigation source (global costmap + cloud_costmap) and is untouched.
+         This chain deliberately segments a WIDE height window (0.05..2.0 m)
+         and a longer depth horizon (4.0 m); direct_raster then applies the
+         LIVE-tunable height window / cluster / range filters on top, so the
+         final "what is an obstacle" decision is adjustable at runtime via
+         /mapping/set_direct without restarting this container. Ground
+         thresholds match the narrow instance so /mapping/ground_cloud_wide
+         stays equivalent to /ground_cloud. -->
+    <node pkg="nodelet" type="nodelet" name="ref_depth2cloud_wide" args="standalone rtabmap_util/point_cloud_xyz" output="screen">
+        <remap from="depth/image" to="/rtabmap/depth/image_out"/>
+        <remap from="depth/camera_info" to="/rtabmap/rgb/camera_info_out"/>
+        <remap from="cloud" to="/ref/cloudXYZ_wide"/>
+
+        <param name="approx_sync" type="bool" value="true"/>
+        <param name="decimation" type="int" value="8"/>
+        <param name="voxel_size" type="double" value="0.05"/>
+        <!-- 4.0 (vs 2.8 narrow): the live obstacle_max_range_m slider needs
+             headroom; direct_raster's default cap stays 2.8 so behaviour is
+             unchanged until the user raises it. -->
+        <param name="max_depth" type="double" value="4.0"/>
+        <param name="noise_filter_radius" type="double" value="0.12"/>
+        <param name="noise_filter_min_neighbors" type="int" value="5"/>
+    </node>
+
+    <node pkg="nodelet" type="nodelet" name="ref_obstacles_detection_wide" args="standalone rtabmap_util/obstacles_detection rtabmap_pc_processing_wide" output="screen">
+        <remap from="cloud"     to="/ref/cloudXYZ_wide"/>
+        <remap from="obstacles" to="/ref/obstacles_cloud_wide"/>
+        <remap from="ground"    to="/ref/ground_cloud_wide"/>
+        <param name="frame_id"             type="string" value="base_link"/>
+        <param name="wait_for_transform"   type="bool" value="true"/>
+        <param name="Grid/MinClusterSize"     type="int" value="2"/>
+        <param name="Grid/MaxObstacleHeight" type="double" value="2.0"/>
+        <param name="Grid/MinObstacleHeight" type="double" value="0.05"/>
+        <param name="Grid/MaxGroundHeight"       type="double" value="0.15"/>
+        <param name="Grid/MaxGroundAngle" type="double" value="35"/>
+        <param name="Grid/ClusterRadius" type="double" value="0.15"/>
+        <param name="Grid/NormalsSegmentation" type="bool" value="true"/>
+        <param name="Grid/FlatObstacleDetected" type="bool" value="true"/>
+    </node>
+
+</launch>

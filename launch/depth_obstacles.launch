@@ -1,0 +1,11 @@
+<launch>
+  <!-- Replaces rtabmap_docker obstacles_detection.launch (container RTABMAP_OBSTACLES): same inputs (the
+       RTABMAP_ODOM_SYNC outputs), same output topics, one process. -->
+  <arg name="depth" default="/rtabmap/depth/image_out"/>
+  <arg name="camera_info" default="/rtabmap/rgb/camera_info_out"/>
+  <node pkg="vitulus_depth_obstacles" type="depth_obstacles" name="depth_obstacles" output="log" respawn="true">
+    <rosparam command="load" file="$(find vitulus_depth_obstacles)/config/d435_ros1.yaml"/>
+    <remap from="depth/image" to="$(arg depth)"/>
+    <remap from="depth/camera_info" to="$(arg camera_info)"/>
+  </node>
+</launch>

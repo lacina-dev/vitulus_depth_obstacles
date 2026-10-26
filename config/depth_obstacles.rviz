@@ -1,0 +1,76 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz_default_plugins/Grid
+      Name: Grid
+      Enabled: true
+      Cell Size: 0.5
+      Plane Cell Count: 20
+      Reference Frame: base_link
+    - Class: rviz_default_plugins/RobotModel
+      Name: Robot
+      Enabled: true
+      Description Source: Topic
+      Description Topic:
+        Value: /robot_description
+    - Class: rviz_default_plugins/PointCloud2
+      Name: "Ground (/ground_cloud)"
+      Enabled: true
+      Topic:
+        Value: /ground_cloud
+        Reliability Policy: Reliable
+      Color Transformer: FlatColor
+      Color: 60; 200; 60
+      Style: Boxes
+      Size (m): 0.05
+      Decay Time: 0
+    - Class: rviz_default_plugins/PointCloud2
+      Name: "Obstacles (/obstacles_cloud)"
+      Enabled: true
+      Topic:
+        Value: /obstacles_cloud
+        Reliability Policy: Reliable
+      Color Transformer: FlatColor
+      Color: 230; 40; 40
+      Style: Boxes
+      Size (m): 0.05
+      Decay Time: 0
+    - Class: rviz_default_plugins/PointCloud2
+      Name: "Mapping obstacles (wide)"
+      Enabled: false
+      Topic:
+        Value: /mapping/obstacles_cloud_wide
+        Reliability Policy: Reliable
+      Color Transformer: FlatColor
+      Color: 255; 160; 0
+      Style: Boxes
+      Size (m): 0.05
+    - Class: rviz_default_plugins/Image
+      Name: "D435 colour"
+      Enabled: true
+      Topic:
+        Value: /d435/color/image_raw
+        Reliability Policy: Best Effort
+  Global Options:
+    Background Color: 30; 30; 34
+    Fixed Frame: base_link
+    Frame Rate: 15
+  Name: root
+  Tools:
+    - Class: rviz_default_plugins/MoveCamera
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Distance: 6
+      Focal Point:
+        X: 1.5
+        Y: 0
+        Z: 0
+      Pitch: 0.6
+      Yaw: 3.4
+Window Geometry:
+  Width: 1400
+  Height: 900

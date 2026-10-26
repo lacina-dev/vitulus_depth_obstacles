@@ -1,0 +1,53 @@
+# D435 ground / obstacle clouds. Values = the ROS1 rtabmap_docker obstacles_detection.launch (2026-07-12 / 2026-08-09
+# tuning), so the outputs equal the RTAB-Map chains. Every numeric value can be changed at runtime:
+#   ros2 param set /depth_obstacles nav.max_depth 3.0
+depth_obstacles:
+  ros__parameters:
+    frame_id: base_link
+    wait_for_transform: 0.2      # s; ROS2 rtabmap default
+    approx_sync: true
+    max_rate_hz: 0.0             # 0 = every depth frame (as RTAB-Map)
+    profiles: [nav, wide]
+    # navigation: global costmap + cloud_costmap_node + vitulus_mapping insertion_gate
+    nav:
+      decimation: 8
+      voxel_size: 0.05
+      max_depth: 2.8             # D435 depth degrades past ~3 m outdoors
+      noise_filter_radius: 0.12
+      noise_filter_min_neighbors: 5
+      max_obstacle_height: 0.5
+      max_ground_height: 0.15
+      max_ground_angle_deg: 35.0
+      cluster_radius: 0.15
+      min_cluster_size: 2
+      normals_segmentation: true
+      flat_obstacles_detected: true
+      # The old launch set Grid/MinObstacleHeight 0.15, which is not an RTAB-Map parameter (ignored): obstacles start
+      # at max_ground_height. -1 keeps exactly that.
+      min_obstacle_height: -1.0
+      cloud_topic: /cloudXYZ
+      obstacles_topic: /obstacles_cloud
+      ground_topic: /ground_cloud
+      # neither ground nor obstacle (not an RTAB-Map output); intensity = reason: 1 above max_obstacle_height,
+      # 2 below min_ground_height, 3 not ground but below the obstacle floor (grass, slopes), 4 isolated points
+      rest_topic: /rest_cloud
+    # mapping only (direct_raster applies its live height / range filters on top)
+    wide:
+      decimation: 8
+      voxel_size: 0.05
+      max_depth: 4.0
+      noise_filter_radius: 0.12
+      noise_filter_min_neighbors: 5
+      max_obstacle_height: 2.0
+      max_ground_height: 0.15
+      max_ground_angle_deg: 35.0
+      cluster_radius: 0.15
+      min_cluster_size: 2
+      normals_segmentation: true
+      flat_obstacles_detected: true
+      # old launch: Grid/MinObstacleHeight 0.05 (ignored by RTAB-Map, obstacles started at 0.15). -1 = unchanged.
+      min_obstacle_height: -1.0
+      cloud_topic: /mapping/cloudXYZ_wide
+      obstacles_topic: /mapping/obstacles_cloud_wide
+      ground_topic: /mapping/ground_cloud_wide
+      rest_topic: /mapping/rest_cloud_wide

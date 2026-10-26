@@ -1,0 +1,47 @@
+# Values = rtabmap_docker obstacles_detection.launch (narrow chain 2026-07-12, wide chain 2026-08-09), so the
+# clouds equal RTAB-Map's. Change a value: rosparam set /depth_obstacles/nav/max_depth 3.0 && rosservice call
+# /depth_obstacles/reload
+frame_id: base_link
+wait_for_transform: 0.1        # rtabmap ROS1 wait_for_transform true + wait_for_transform_duration 0.1
+approx_sync: true
+profiles: [nav, wide]
+nav:                           # navigation: global costmap, cloud_costmap_node, mapping insertion_gate
+  decimation: 8
+  voxel_size: 0.05
+  max_depth: 2.8
+  noise_filter_radius: 0.12
+  noise_filter_min_neighbors: 5
+  max_obstacle_height: 0.5
+  max_ground_height: 0.15
+  max_ground_angle_deg: 35.0
+  cluster_radius: 0.15
+  min_cluster_size: 2
+  normals_segmentation: true
+  flat_obstacles_detected: true
+  # Grid/MinObstacleHeight of the launch is not an RTAB-Map parameter (ignored): obstacles start at
+  # max_ground_height. -1 keeps that (owner 2026-10-26: keep 0.15).
+  min_obstacle_height: -1.0
+  cloud_topic: /cloudXYZ
+  obstacles_topic: /obstacles_cloud
+  ground_topic: /ground_cloud
+  # neither ground nor obstacle, intensity = reason (1 above max height, 2 below min ground, 3 not ground but
+  # below the obstacle floor, 4 isolated points); computed only with a subscriber (UI camera layer "rest")
+  rest_topic: /rest_cloud
+wide:                          # mapping only (direct_raster)
+  decimation: 8
+  voxel_size: 0.05
+  max_depth: 4.0
+  noise_filter_radius: 0.12
+  noise_filter_min_neighbors: 5
+  max_obstacle_height: 2.0
+  max_ground_height: 0.15
+  max_ground_angle_deg: 35.0
+  cluster_radius: 0.15
+  min_cluster_size: 2
+  normals_segmentation: true
+  flat_obstacles_detected: true
+  min_obstacle_height: -1.0
+  cloud_topic: /mapping/cloudXYZ_wide
+  obstacles_topic: /mapping/obstacles_cloud_wide
+  ground_topic: /mapping/ground_cloud_wide
+  rest_topic: /mapping/rest_cloud_wide
