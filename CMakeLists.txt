@@ -14,19 +14,25 @@ find_package(OpenMP)
 
 if("$ENV{ROS_VERSION}" STREQUAL "1")
   # ------------------------------------------------------------------------------------------------- ROS 1
-  find_package(catkin REQUIRED COMPONENTS roscpp sensor_msgs diagnostic_msgs std_srvs message_filters tf2 tf2_ros
-    tf2_eigen pcl_conversions)
+  find_package(catkin REQUIRED COMPONENTS roscpp std_msgs sensor_msgs diagnostic_msgs std_srvs message_filters tf2
+    tf2_ros tf2_eigen pcl_conversions)
   catkin_package()
-  include_directories(include ${catkin_INCLUDE_DIRS} ${PCL_INCLUDE_DIRS} ${EIGEN3_INCLUDE_DIR})
+  # ~set / ~config / the stored settings; libjsoncpp-dev comes with libpcl-dev (libvtk7-dev depends on it)
+  find_path(JSONCPP_INCLUDE_DIR json/json.h PATH_SUFFIXES jsoncpp)
+  find_library(JSONCPP_LIBRARY jsoncpp)
+  if(NOT JSONCPP_INCLUDE_DIR OR NOT JSONCPP_LIBRARY)
+    message(FATAL_ERROR "libjsoncpp-dev not found")
+  endif()
+  include_directories(include ${catkin_INCLUDE_DIRS} ${PCL_INCLUDE_DIRS} ${EIGEN3_INCLUDE_DIR} ${JSONCPP_INCLUDE_DIR})
 
-  add_library(depth_obstacles_core src/segmentation.cpp)
+  add_library(depth_obstacles_core src/segmentation.cpp src/live_config.cpp)
   target_link_libraries(depth_obstacles_core ${PCL_LIBRARIES})
   if(OpenMP_CXX_FOUND)
     target_link_libraries(depth_obstacles_core OpenMP::OpenMP_CXX)
   endif()
 
   add_executable(depth_obstacles src/ros1_node.cpp)
-  target_link_libraries(depth_obstacles depth_obstacles_core ${catkin_LIBRARIES})
+  target_link_libraries(depth_obstacles depth_obstacles_core ${catkin_LIBRARIES} ${JSONCPP_LIBRARY})
 
   install(TARGETS depth_obstacles depth_obstacles_core
     ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
@@ -40,6 +46,7 @@ if("$ENV{ROS_VERSION}" STREQUAL "1")
   if(CATKIN_ENABLE_TESTING)
     catkin_add_gtest(test_segmentation test/test_segmentation.cpp)
     target_link_libraries(test_segmentation depth_obstacles_core gtest_main)
+    # the node on its own roscore (port 11820): pytest test/test_node.py with this workspace sourced
   endif()
 
 else()
@@ -55,7 +62,7 @@ else()
   find_package(tf2_eigen REQUIRED)
   find_package(pcl_conversions REQUIRED)
 
-  add_library(depth_obstacles_core SHARED src/segmentation.cpp)
+  add_library(depth_obstacles_core SHARED src/segmentation.cpp src/live_config.cpp)
   target_include_directories(depth_obstacles_core PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> $<INSTALL_INTERFACE:include> ${PCL_INCLUDE_DIRS})
   target_link_libraries(depth_obstacles_core ${PCL_LIBRARIES} Eigen3::Eigen)

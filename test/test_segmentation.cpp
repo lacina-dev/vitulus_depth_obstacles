@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <vector>
 
+#include "vitulus_depth_obstacles/live_config.hpp"
 #include "vitulus_depth_obstacles/segmentation.hpp"
 
 using namespace vitulus_depth_obstacles;
@@ -219,4 +220,187 @@ TEST(Segment, EmptyInput)
   EXPECT_TRUE(obstacles->empty());
   DepthPoints dp;
   EXPECT_TRUE(make_cloud(dp, nav())->empty());
+}
+
+// --- live changes (live_config.cpp) ---------------------------------------------------------------------------
+
+namespace
+{
+ProfileSettings nav_settings()
+{
+  ProfileSettings s;   // config/d435_ros1.yaml "nav"
+  s.decimation = 8;
+  s.p = nav();
+  return s;
+}
+
+ProfileSettings wide_settings()
+{
+  ProfileSettings s = nav_settings();
+  s.p.max_depth = 4.0;
+  s.p.max_obstacle_height = 2.0;
+  return s;
+}
+
+bool has_code(const std::vector<Issue> & v, const std::string & code)
+{
+  for (const auto & i : v) {
+    if (i.code == code) return true;
+  }
+  return false;
+}
+
+// the value refused by the table
+std::string refused(const std::string & key, double value, bool safety)
+{
+  std::vector<Issue> issues;
+  EXPECT_NE(find_param(key), nullptr) << key;
+  return check_value(*find_param(key), value, safety, issues) ? "" : issues[0].code;
+}
+
+// one value through everything a set of the safety profile goes through; "" = accepted
+std::string safe_change(const std::string & key, double value)
+{
+  const ProfileSettings s = with_values(nav_settings(), {{key, value}});
+  std::vector<Issue> v;
+  if (!check_value(*find_param(key), value, true, v)) return v[0].code;
+  v = check_relations(s, true, 480, 640);
+  if (v.empty()) v = check_reference(run_reference(s));
+  return v.empty() ? "" : v[0].code;
+}
+}  // namespace
+
+TEST(LiveConfig, TableCoversEveryParameterAndRoundTrips)
+{
+  EXPECT_EQ(param_table().size(), 22u);
+  ProfileSettings s = nav_settings();
+  const ParamValues v = to_values(s);
+  EXPECT_EQ(v.size(), param_table().size());
+  EXPECT_EQ(v.at("decimation"), 8.0);
+  EXPECT_EQ(v.at("flat_obstacles_detected"), 1.0);
+  EXPECT_EQ(v.at("min_obstacle_height"), -1.0);    // NaN in ChainParams
+  const ProfileSettings t = with_values(ProfileSettings(), v);
+  EXPECT_EQ(t.decimation, 8);
+  EXPECT_DOUBLE_EQ(t.p.noise_filter_radius, 0.12);
+  EXPECT_TRUE(std::isnan(t.p.min_obstacle_height));
+  EXPECT_DOUBLE_EQ(with_values(s, {{"min_obstacle_height", 0.2}}).p.min_obstacle_height, 0.2);
+}
+
+TEST(LiveConfig, DefaultsPassEverything)
+{
+  EXPECT_TRUE(check_relations(nav_settings(), true, 480, 640).empty());
+  EXPECT_TRUE(check_relations(wide_settings(), false, 480, 640).empty());
+  const ReferenceResult r = run_reference(nav_settings());
+  EXPECT_GE(r.box_points, 10u) << "the reference box must be seen with margin";
+  EXPECT_GE(r.ground_points, 50u);
+  EXPECT_EQ(r.phantom_points, 0u);
+  EXPECT_TRUE(check_reference(r).empty());
+  // every default inside the limits of its profile
+  for (const auto & d : param_table()) {
+    if (std::string(d.key) == "normal_threads") continue;
+    std::vector<Issue> issues;
+    EXPECT_TRUE(check_value(d, d.get(nav_settings()), true, issues)) << d.key << " " << (issues.empty() ? "" : issues[0].code);
+    EXPECT_TRUE(check_value(d, d.get(wide_settings()), false, issues)) << d.key;
+  }
+}
+
+TEST(LiveConfig, ValueChecks)
+{
+  EXPECT_EQ(refused("max_depth", 1.0, true), "below_min");     // nav: must see far enough to stop
+  EXPECT_EQ(refused("max_depth", 1.0, false), "");             // mapping may
+  EXPECT_EQ(refused("max_depth", 0.0, true), "below_min");
+  EXPECT_EQ(refused("max_depth", 0.0, false), "below_min");
+  EXPECT_EQ(refused("max_depth", 99.0, false), "above_max");
+  EXPECT_EQ(refused("max_depth", std::nan(""), false), "not_number");
+  EXPECT_EQ(refused("max_obstacle_height", 0.0, true), "off_refused");
+  EXPECT_EQ(refused("voxel_size", 0.0, true), "off_refused");
+  EXPECT_EQ(refused("max_ground_angle_deg", 85.0, true), "above_max");   // walls would become ground
+  EXPECT_EQ(refused("normal_k", 5.5, false), "not_integer");
+  EXPECT_EQ(refused("normal_k", 2.0, false), "below_min");
+  EXPECT_EQ(refused("decimation", 3.0, false), "not_choice");  // does not divide 640: nothing would be published
+  EXPECT_EQ(refused("normals_segmentation", 2.0, false), "not_bool");
+  EXPECT_EQ(refused("min_obstacle_height", -1.0, true), "");   // off = the default
+  EXPECT_EQ(refused("noise_filter_radius", 0.0, true), "");
+}
+
+TEST(LiveConfig, Relations)
+{
+  auto wide = [](const ParamValues & v) { return check_relations(with_values(wide_settings(), v), false, 480, 640); };
+  EXPECT_TRUE(has_code(wide({{"min_depth", 1.5}, {"max_depth", 1.0}}), "order"));
+  EXPECT_TRUE(has_code(wide({{"range_min", 1.5}, {"range_max", 1.0}}), "order"));
+  EXPECT_TRUE(has_code(wide({{"min_ground_height", 0.2}, {"max_ground_height", 0.1}}), "order"));
+  EXPECT_TRUE(has_code(wide({{"max_ground_height", 0.5}, {"max_obstacle_height", 0.4}}), "order"));
+  EXPECT_TRUE(has_code(wide({{"min_obstacle_height", 0.9}, {"max_obstacle_height", 0.5}}), "order"));
+  EXPECT_TRUE(has_code(wide({{"min_depth", 1.9}, {"range_max", 1.5}}), "window_short"));   // no overlap of the two cuts
+  EXPECT_TRUE(wide({{"max_depth", 6.0}, {"range_max", 0.0}}).empty());                    // both off is fine there
+  // the decimation against the real image
+  ProfileSettings s = wide_settings();
+  s.decimation = 16;
+  EXPECT_TRUE(has_code(check_relations(s, false, 720, 1270), "no_divide"));
+  EXPECT_TRUE(check_relations(s, false, 720, 1280).empty());
+  EXPECT_TRUE(check_relations(s, false, 0, 0).empty());
+}
+
+// Every way found to blind or to stop the robot through one or two parameters of nav must be refused.
+TEST(LiveConfig, NavCannotBeBlinded)
+{
+  EXPECT_EQ(safe_change("max_depth", 0.3), "below_min");
+  EXPECT_EQ(safe_change("max_obstacle_height", 0.1), "below_min");
+  EXPECT_EQ(safe_change("max_ground_height", 0.9), "above_max");
+  EXPECT_EQ(safe_change("min_cluster_size", 500), "above_max");
+  EXPECT_EQ(safe_change("cluster_radius", 0.04), "below_min");
+  // a window of 0.1 m of height at least
+  EXPECT_EQ(safe_change("min_obstacle_height", 0.2), "");
+  EXPECT_EQ(safe_change("min_obstacle_height", 0.3), "blind");   // the obstacle floor above the 0.3 m box
+  EXPECT_EQ(safe_change("max_ground_height", 0.3), "blind");
+  EXPECT_EQ(safe_change("min_cluster_size", 25), "blind");
+  ProfileSettings s = with_values(nav_settings(), {{"min_obstacle_height", 0.3}, {"max_obstacle_height", 0.35}});
+  EXPECT_TRUE(has_code(check_relations(s, true, 480, 640), "obstacle_window"));
+  // the distance overlap: both limits fine, the overlap too short
+  s = with_values(nav_settings(), {{"min_depth", 0.6}, {"max_depth", 1.5}});
+  EXPECT_TRUE(has_code(check_relations(s, true, 480, 640), "window_short"));
+  // voxels bigger than the reach of the clusters / of the noise filter
+  s = with_values(nav_settings(), {{"voxel_size", 0.15}, {"cell_size", 0.15}, {"cluster_radius", 0.1}});
+  EXPECT_TRUE(has_code(check_relations(s, true, 480, 640), "cluster_small"));
+  s = with_values(nav_settings(), {{"voxel_size", 0.1}});
+  EXPECT_TRUE(has_code(check_relations(s, true, 480, 640), "noise_small"));
+  // inside every limit, but the box is gone: only the reference scene knows
+  s = with_values(nav_settings(), {{"noise_filter_radius", 0.08}, {"noise_filter_min_neighbors", 15}});
+  ASSERT_TRUE(check_relations(s, true, 480, 640).empty());
+  EXPECT_TRUE(has_code(check_reference(run_reference(s)), "blind"));
+  EXPECT_EQ(safe_change("decimation", 16), "");
+}
+
+TEST(LiveConfig, ReferenceSeesPhantomObstacles)
+{
+  // the whole ground taken for an obstacle: no normals, a ground band below the real ground
+  ProfileSettings s = wide_settings();
+  s.p.normals_segmentation = false;
+  s.p.max_ground_height = -0.2;
+  s.p.min_ground_height = -1.0;
+  const ReferenceResult r = run_reference(s);
+  EXPECT_GT(r.phantom_points, 10u);
+  EXPECT_TRUE(has_code(check_reference(r), "phantom"));
+}
+
+// The settings of a frame are all the core knows: a change between frames gives what a fresh start with it gives.
+TEST(LiveConfig, ChangeBetweenFramesEqualsFreshStart)
+{
+  const auto cam = camera_pose();
+  const auto img = render(cam, true, 0.45);
+  DepthPoints dp;
+  ASSERT_TRUE(project_depth(img.data(), true, 480, 640, 640 * 2, k640(), 8, dp));
+  ProfileSettings s = nav_settings();
+  Cloud::Ptr g1, o1, g2, o2;
+  segment(make_cloud(dp, s.p), cam, s.p, g1, o1);
+  const ProfileSettings changed = with_values(s, {{"max_obstacle_height", 0.35}, {"max_ground_height", 0.1}});
+  segment(make_cloud(dp, changed.p), cam, changed.p, g1, o1);
+  ChainParams fresh = nav();
+  fresh.max_obstacle_height = 0.35;
+  fresh.max_ground_height = 0.1;
+  segment(make_cloud(dp, fresh), cam, fresh, g2, o2);
+  ASSERT_EQ(o1->size(), o2->size());
+  ASSERT_EQ(g1->size(), g2->size());
+  ASSERT_GT(o1->size(), 3u);
+  for (std::size_t i = 0; i < o1->size(); ++i) EXPECT_EQ((*o1)[i].z, (*o2)[i].z);
 }
