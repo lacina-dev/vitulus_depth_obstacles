@@ -4,7 +4,9 @@
   <arg name="depth" default="/rtabmap/depth/image_out"/>
   <arg name="camera_info" default="/rtabmap/rgb/camera_info_out"/>
   <!-- local traversability map from the clouds below (package vitulus_traversability). Off unless the robot sets
-       VITULUS_TRAVERSABILITY=true (~/.bashrc, sourced by vitulus.service): a robot without the package stays as is -->
+       VITULUS_TRAVERSABILITY=true (~/.bashrc, sourced by vitulus.service): a robot without the package stays as is.
+       On = 1 / true / yes / on (any case, spaces ignored); anything else (unset, empty, false, a typo) = off, it never
+       breaks this launch (no /obstacles_cloud would mean no obstacles in the navigation) -->
   <arg name="traversability" default="$(optenv VITULUS_TRAVERSABILITY false)"/>
   <node pkg="vitulus_depth_obstacles" type="depth_obstacles" name="depth_obstacles" output="log" respawn="true">
     <rosparam command="load" file="$(find vitulus_depth_obstacles)/config/d435_ros1.yaml"/>
@@ -13,7 +15,8 @@
   </node>
   <!-- the same node name as a standalone start of traversability.launch: the ROS master shuts the older instance
        down when this one registers, so the two never run side by side -->
-  <include if="$(arg traversability)" file="$(find vitulus_traversability)/launch/traversability.launch">
+  <include if="$(eval str(arg('traversability')).strip().lower() in ('1', 'true', 'yes', 'on'))"
+           file="$(find vitulus_traversability)/launch/traversability.launch">
     <arg name="respawn" value="true"/>
   </include>
 </launch>

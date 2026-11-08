@@ -75,6 +75,15 @@ rostopic pub -1 /depth_obstacles/set std_msgs/String \
     'data: "{\"profile\": \"nav\", \"values\": {\"max_depth\": 3.0}}"'      # live, see below
 ```
 
+Optional local traversability map (package `vitulus_traversability`, it reads `/cloudXYZ` and `/obstacles_cloud`):
+`depth_obstacles.launch` also starts `traversability.launch` when the arg `traversability` is on; its default is the
+environment variable `VITULUS_TRAVERSABILITY` (the robot sets it in `~/.bashrc`, sourced by `vitulus.service`).
+On = `1`, `true`, `yes`, `on` (any case, surrounding spaces ignored); unset, empty, `false` or anything else = off —
+a wrong value never stops this launch (and with it `/obstacles_cloud`). Unset = exactly the launch without the
+include (same nodes and `--dump-params`), so a robot without `vitulus_traversability` is unchanged.
+On (`true`) without the package built does stop this launch (rospack error) — switch it on only after
+`catkin build vitulus_traversability`.
+
 Outputs per profile (defaults in `config/d435.yaml`):
 
 | profile | cloud (after voxel + noise filter) | obstacles | ground | rest |
